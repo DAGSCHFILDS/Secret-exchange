@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secret Exchange</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 2rem;
+            background-color: #121212; /* Dark background for dark mode */
+            color: #fff; /* Default text color in dark mode: white */
+            font-size: 1em;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        h1 {
+            font-size: 1.5em;
+            text-align: center;
+            color: inherit; /* Inherit color from body */
+        }
+
+        /* Titles */
+        h2 {
+            font-size: 1.2em;
+            color: inherit; /* Inherit color from body */
+        }
+
+        .section {
+            background: #1e1e1e;
+            padding: 20px;
+            margin-bottom: 30px;
+            border: 1px solid #444;
+            border-radius: 10px;
+        }
+
+        input, textarea, button {
+            width: 100%;
+            padding: 12px;
+            margin-top: 10px;
+            box-sizing: border-box;
+            font-size: 1em;
+            background-color: #333;
+            color: #fff;
+            border: 1px solid #444;
+            border-radius: 5px;
+        }
+
+        input:focus, textarea:focus, button:focus {
+            outline: none;
+            border-color: #888;
+        }
+
+        pre {
+            background: #222;
+            padding: 10px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            border: 1px solid #444;
+        }
+
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+
+        .failure {
+            color: red;
+            font-weight: bold;
+        }
+
+        /* Dark Mode Styles */
+        body {
+            background-color: #121212;
+            color: #fff;
+        }
+
+        .section {
+            background-color: #1e1e1e;
+            border-color: #444;
+        }
+
+        h2 {
+            color: #ddd; /* Lighter gray for titles in dark mode */
+        }
+
+        /* Light Mode Styles */
+        .light-mode body {
+            background-color: #f5f5f5; /* Light background for light mode */
+            color: #333; /* Dark text color for light mode */
+        }
+
+        .light-mode .section {
+            background-color: #fff; /* White background for sections in light mode */
+            border-color: #ccc; /* Lighter border for sections */
+        }
+
+        .light-mode input, .light-mode textarea, .light-mode button {
+            background-color: #fff; /* White background for inputs */
+            color: #333; /* Dark text color for inputs */
+            border: 1px solid #ccc; /* Lighter border for inputs */
+        }
+
+        .light-mode pre {
+            background-color: #f5f5f5; /* Light background for preformatted text */
+            color: #333; /* Dark text for preformatted text */
+            border: 1px solid #ccc; /* Lighter border for preformatted text */
+        }
+
+        /* Instruction Text (Paragraph) Styles */
+        p {
+            font-size: 1.1em;
+        }
+
+        .light-mode p {
+            color: #444; /* Darker gray for instruction text in light mode */
+        }
+
+        .dark-mode p {
+            color: #ddd; /* Lighter gray for instruction text in dark mode */
+        }
+
+        /* Dark Mode Toggle Button */
+        #darkModeButton {
+            width: 200px;
+            padding: 12px;
+            margin-top: 10px;
+            background: #333;
+            color: #fff;
+            border: none;
+            font-size: 1.2em;
+            cursor: pointer;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        #darkModeButton.light-mode {
+            background: #fff;
+            color: #333;
+            border: 1px solid #ccc;
+        }
+
+        /* Media Query for smaller devices */
+        @media (max-width: 600px) {
+            body {
+                font-size: 0.9em;
+                margin: 1rem;
+            }
+
+            h1 {
+                font-size: 1.2em;
+            }
+
+            input, textarea, button {
+                font-size: 1em;
+                padding: 14px;
+            }
+
+            .section {
+                padding: 15px;
+            }
+
+            pre {
+                font-size: 0.9em;
+                padding: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Secret Exchange Tool (Offline, Peer-to-Peer)</h1>
+
+    <!-- Dark Mode Toggle Button -->
+    <button id="darkModeButton" onclick="toggleDarkMode()">Switch to Light Mode</button>
+
+    <div class="section">
+        <h2>Encrypt Message</h2>
+        <p>Enter your secret to generate the encrypted message. Share only the encrypted message, never the secret.</p>
+        <input id="secretKey" placeholder="Your proposed secret">
+        <button onclick="encrypt()">Encrypt</button>
+        <p><strong>Encrypted Message:</strong></p>
+        <pre id="cipherOut"></pre>
+    </div>
+
+    <div class="section">
+        <h2>Decrypt Message</h2>
+        <p>Paste the encrypted message and try one or more possible secrets (separated by new lines).</p>
+        <textarea id="cipherIn" rows="4" placeholder="Encrypted message (copy from peer)"></textarea>
+        <textarea id="decryptKeys" rows="4" placeholder="Guessed secrets, one per line"></textarea>
+        <button onclick="decrypt()">Decrypt</button>
+        <p><strong>Result:</strong></p>
+        <pre id="decryptedOut"></pre>
+    </div>
+
+    <script>
+        const constantMessage = "do we both know";
+
+        async function sha256(text) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(text.toLowerCase());
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            return new Uint8Array(hashBuffer);
+        }
+
+        function xor(text, key) {
+            let output = '';
+            for (let i = 0; i < text.length; i++) {
+                output += String.fromCharCode(text.charCodeAt(i) ^ key[i % key.length]);
+            }
+            return output;
+        }
+
+        async function encrypt() {
+            const keyText = document.getElementById("secretKey").value.toLowerCase();
+            const hashKey = await sha256(keyText);
+            const encrypted = xor(constantMessage, hashKey);
+            const base64 = btoa(encrypted);
+            document.getElementById("cipherOut").textContent = base64;
+        }
+
+        async function decrypt() {
+            const cipherText = document.getElementById("cipherIn").value.trim();
+            const keyLines = document.getElementById("decryptKeys").value.split('\n').map(k => k.trim()).filter(k => k.length > 0);
+            const output = document.getElementById("decryptedOut");
+            output.innerHTML = "";
+
+            try {
+                const decoded = atob(cipherText);
+                for (let i = 0; i < keyLines.length; i++) {
+                    const testKey = keyLines[i].toLowerCase();
+                    const hashKey = await sha256(testKey);
+                    const decrypted = xor(decoded, hashKey);
+                    if (decrypted.toLowerCase() === constantMessage) {
+                        output.innerHTML = 
+`✅ Decryption Successful!
+The message confirms that YOU AND THE SENDER BOTH KNOW THE SAME SECRET.
+
+Matched Key: "${testKey}"`;
+                        return;
+                    }
+                }
+                output.innerHTML = `<span class="failure">None of the keys worked. Message could not be decrypted.</span>`;
+            } catch (e) {
+                output.innerHTML = `<span class="failure">Error: Invalid input or corrupted encrypted message.</span>`;
+            }
+        }
+
+        function toggleDarkMode() {
+            const body = document.body;
+            const button = document.getElementById("darkModeButton");
+
+            // Toggle light mode and dark mode
+            body.classList.toggle('light-mode');
+            button.classList.toggle('light-mode');
+
+            // Change button text based on mode
+            if (body.classList.contains('light-mode')) {
+                button.textContent = "Switch to Dark Mode";
+            } else {
+                button.textContent = "Switch to Light Mode";
+            }
+        }
+
+        // Initialize with Dark Mode by default
+        document.body.classList.remove('light-mode');
+    </script>
+
+</body>
+</html>
